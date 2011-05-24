@@ -3,14 +3,14 @@
 	<Components>
 		<ImageSource type="CameraUniCap" thread="ImageSourceThread" group="s1">
 			<dev>
-				<device>/dev/video0</device>
+				<device>/dev/video1</device>
 			<!--	 <input>S-Video</input> -->
-				 <input>Composite0</input>   
+				 <input>Composite0</input>    
 				
 			</dev>
 		</ImageSource>
 		
-		<CvUndistort type="CvUndistort" thread="ImageSourceThread" group="s1">
+		<!-- <CvUndistort type="CvUndistort" thread="ImageSourceThread" group="s1">
 			<cameraMatrix>
 				[3,3](
 					(647.07647705, 0., 383.50000000),
@@ -22,11 +22,11 @@
 				[1,5](
 					(-0.51084775, 0.23313555, 4.50637517e-03, -6.86281081e-03, 4.94365674e-03)
 				)
-			</distCoeffs>
-		</CvUndistort>
+			</distCoeffs> -->
+		<!-- </CvUndistort> -->
 
-		<NewestImage type="NewestImage" thread="ProcessingThread" group="s1">
-		</NewestImage>
+		<!--<NewestImage type="NewestImage" thread="ProcessingThread" group="s1"> -->
+		<!-- </NewestImage> -->
 
 		<CvFindLabirynth type="CvFindLabirynth" thread="ProcessingThread" group="s1">
 		</CvFindLabirynth>
@@ -63,11 +63,13 @@
 	</Executors>
 
 	<Events>
-		<Event source="ImageSource.newImage" destination="CvUndistort.onNewImage"/>
-		<Event source="CvUndistort.newUndistortedImage" destination="NewestImage.onNewImage"/>
+		<Event source="ImageSource.newImage" destination="CvFindLabirynth.onNewImage"/>
+	<!--	<Event source="CvUndistort.newUndistortedImage" destination="NewestImage.onNewImage"/>
 		
-		<Event source="NewestImage.newImage" destination="CvFindLabirynth.onNewImage"/>
-		
+		<Event source="NewestImage.newImage" destination="CvFindLabirynth.onNewImage"/> -->
+
+		<Event source="CvFindLabirynth.newImage" destination="Window.onNewImage"/>
+				
 		<Event source="Mrrocpp.rpcCall" destination="CvFindLabirynth.onRpcCall"/>
 		
 		<Event source="CvFindLabirynth.rpcResult" destination="Mrrocpp.onRpcResult"/>
@@ -77,14 +79,14 @@
 		
 		<Event source="VisualServoIB.readingReady" destination="Mrrocpp.onNewReading"/> -->
 		
-		<Event source="CvUndistort.newUndistortedImage" destination="Window.onNewImage"/>
+
 	</Events>
 
 	<DataStreams>
 		<ImageSource>
-			<out_img type="out" group="OriginalImage"/>
+			<out_img type="out" group="NewestImage"/>
 		</ImageSource>
-		
+		<!--
 		<CvUndistort>
 			<in_img type="in" group="OriginalImage"/>
 			<out_img type="out" group="UndistortedImage"/>
@@ -93,12 +95,13 @@
 		<NewestImage>
 			<in_img type="in" group="UndistortedImage"/>
 			<out_img type="out" group="NewestImage"/>
-		</NewestImage>
+		</NewestImage> -->
 		
 		<CvFindLabirynth>
 			<in_img type="in" group="NewestImage"/>
 			<rpcParam type="in" group="rpcParam"/>
 			<rpcResult type="out" group="rpcResult"/>
+			<out_img type="out" group="NewImage"/>
 		</CvFindLabirynth>
 		
 		<!-- <VisualServoIB>
@@ -113,7 +116,7 @@
 		
 		<Window>
 			<!-- <in_draw type="in" group="Labirynth"/> -->
-			<in_img type="in" group="UndistortedImage"/>
+			<in_img type="in" group="NewImage"/>
 		</Window>
 	</DataStreams>
 </Task>

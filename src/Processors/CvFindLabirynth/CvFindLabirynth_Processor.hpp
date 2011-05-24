@@ -22,6 +22,40 @@
 
 #include "Property.hpp"
 
+#include "Component_Aux.hpp"
+#include "Component.hpp"
+#include "Panel_Empty.hpp"
+#include "DataStream.hpp"
+#include "Props.hpp"
+
+#include <cv.h>
+//using namespace cv;
+#include <highgui.h>
+
+#include <vector>
+
+#define LABIRYNT_SIZE_X 7
+#define LABIRYNT_SIZE_Y 7
+
+/**
+ * info about walls for one rectangle in Labirynth
+ * */
+struct walls_info
+{
+	bool n_wall;
+	bool e_wall;
+	bool w_wall;
+	bool s_wall;
+	int value;
+};
+/**
+ * Point struct
+ * */
+struct Point_labirynth
+{
+	int x;
+	int y;
+};
 
 namespace Processors {
 namespace CvFindLabirynth {
@@ -31,6 +65,11 @@ class CvFindLabirynth_Processor: public Base::Component
 public:
 	CvFindLabirynth_Processor(const std::string & name = "");
 	virtual ~CvFindLabirynth_Processor();
+
+	int EPS;
+	int FIELD;
+	int WALL;
+
 protected:
 	/*!
 	 * Method called when component is started
@@ -63,6 +102,46 @@ protected:
 	virtual bool onStep();
 
 
+	/**
+	* find labirynth's walls
+	*/
+	bool find_labirynth(cv::Mat img, cv::Mat dst, int flag, int value);
+
+	/**
+	* find walls inside labirynth
+	*/
+	bool find_wall(cv::Mat img, cv::Mat dst, int flag, int value, cv::Point2i center);
+
+	/**
+	* find optimal path
+	*/
+	bool find_path(int=0,int=0);
+	/**
+	* helper method for find_path
+	*/
+	void set_neighbours(int y, int x);
+
+	/**
+	* helper method for find_path
+	*/
+	void set_path(Point_labirynth end, Point_labirynth start);
+
+
+
+
+
+	walls_info labirynt_info_array [LABIRYNT_SIZE_Y][LABIRYNT_SIZE_X];
+	int q;
+	bool path_exists;
+	bool path_set;
+	vector<Point_labirynth> path;
+
+	cv::Point2i corner_LU;
+	cv::Point2i corner_RD;
+
+	cv::Point2i ball_center;
+
+
 private:
 	void onNewImage();
 	void onRpcCall();
@@ -78,6 +157,9 @@ private:
 	/** out event and stream */
 	Base::Event* rpcResult;
 	Base::DataStreamOut <Types::Mrrocpp_Proxy::LReading> out_info;
+	//changed image
+	Base::Event * newImage;
+	Base::DataStreamOut <cv::Mat> out_img;
 
 	/** Located corners.*/
 	std::vector<cv::Point2f> corners;
@@ -86,29 +168,7 @@ private:
 	bool found;
 
 	cv::Mat image;
-	/*
-	Common::Timer timer;
-
-	cv::Mat sub_img;
-
-	Base::Property<bool> prop_subpix;
-	Base::Property<int> prop_subpix_window;
-	Base::Property<bool> prop_scale;
-	Base::Property<int> prop_scale_factor;
-	Base::Property<int> prop_width;
-	Base::Property<int> prop_height;
-	Base::Property<float> prop_square_width;
-	Base::Property<float> prop_square_height;
-
-	Base::Property<bool> prop_fastCheck;
-	Base::Property<bool> prop_filterQuads;
-	Base::Property<bool> prop_adaptiveThreshold;
-	Base::Property<bool> prop_normalizeImage;
-
-
-	void sizeCallback(int old_value, int new_value);
-	void flagsCallback(bool old_value, bool new_value);
-*/
+	bool has_image;
 
 };
 
