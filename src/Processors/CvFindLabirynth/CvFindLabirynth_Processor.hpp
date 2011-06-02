@@ -70,6 +70,9 @@ public:
 	int FIELD;
 	int WALL;
 
+	int TEMP;
+	bool HELP;
+
 protected:
 	/*!
 	 * Method called when component is started
@@ -111,6 +114,10 @@ protected:
 	* find walls inside labirynth
 	*/
 	bool find_wall(cv::Mat img, cv::Mat dst, int flag, int value, cv::Point2i center);
+	/**
+	* sprawdz czy zamalowanie pilki nie zamalowalo scianki i popraw to.
+	*/
+	bool find_wall_ball(cv::Mat img, cv::Mat dst, int flag, int value, cv::Point2i center);
 
 	/**
 	* find optimal path
@@ -152,7 +159,7 @@ private:
 	Base::EventHandler <CvFindLabirynth_Processor> h_onNewImage;
 	Base::EventHandler <CvFindLabirynth_Processor> h_onRpcCall;
 	/** In stream. */
-	Base::DataStreamIn <cv::Mat> in_img;
+	Base::DataStreamIn <cv::Mat, Base::DataStreamBuffer::Newest> in_img;
 	Base::DataStreamIn <xdr_iarchive <> > rpcParam;
 	/** out event and stream */
 	Base::Event* rpcResult;

@@ -7,6 +7,9 @@
 
 #include "Common/Logger.hpp"
 
+#include <boost/thread.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+
 
 namespace Processors {
 
@@ -32,6 +35,9 @@ CvFindLabirynth_Processor::CvFindLabirynth_Processor(const std::string & name) :
 	findLabirynthFlags = 0;
 	temp=90;
 	found=true;
+
+	TEMP = 0;
+	HELP = false;
 
 }
 
@@ -112,8 +118,7 @@ void CvFindLabirynth_Processor::onRpcCall()
 
 	for(int i=0;i<50;i++)
 	{
-		for(int j=0;j<2;j++)
-			std::cout<<"LR.path: "<<lr.path[i][0]<<","<<lr.path[i][1]<<std::endl;
+		std::cout<<"LR.path: "<<lr.path[i][0]<<","<<lr.path[i][1]<<std::endl;
 	}
 
 	out_info.write(lr);
@@ -157,15 +162,19 @@ void CvFindLabirynth_Processor::onNewImage()
 			return;
 		}
 
-		image = in_img.read();
-
 		/*do it once only*/
 		if(!has_image)
 		{
+			image = in_img.read();
+			//has_image = true;
 
 			int x_rect=0;
 			int y_rect=0;
 			//int eps = 4;
+
+/***********************/
+/** MAKE CONTOUR IMAGE */
+/***********************/
 
 			// Read image from input data stream.
 			cv::Mat img = image;
@@ -173,18 +182,6 @@ void CvFindLabirynth_Processor::onNewImage()
 			cv::Mat dst(img.rows,img.cols, img.depth());
 			/* CV_RGB2GRAY: convert RGB image to grayscale */
 			cv::cvtColor( img, dst, CV_RGB2GRAY );
-
-			//cv::vector<cv::Vec3f> circles;
-			//cv::HoughCircles(dst,circles, CV_HOUGH_GRADIENT, 1.15, 100, 200);
-
-			//while(!circles.empty())
-			//{
-			//	std::cout<<"cir: "<<circles.back()[0]<<" "<<circles.back()[1]<<" "<<circles.back()[2]<<endl;
-				//ball_center.x = circles.back()[0];
-				//ball_center.y = circles.back()[1];
-			//			circles.pop_back();
-			//}
-
 			/* color invert	*/
 			cv::bitwise_not(dst,dst);
 
@@ -193,52 +190,142 @@ void CvFindLabirynth_Processor::onNewImage()
 			cv::Mat helper(dst.rows,dst.cols, dst.depth());
 			cv::threshold(dst,contour,70,255,CV_THRESH_BINARY);
 
+			cv::Mat dst_rotate;
+			cv::Mat img_rotate;
 
+/***********************/
+/** FIND OUTSIDE WALLS */
+/***********************/
 
-			int minx=500, miny=500,maxx=0,maxy=0;
+			int minx=1000, miny=1000,maxx=0,maxy=0;
+			float angle = 0;
 
-			cv::bitwise_not(contour,contour);
-			cv::vector<cv::Vec4i> lines;
-			cv::HoughLinesP(contour, lines, 1, CV_PI/2, 220, 150, 0);//src,contener,?,kat,treshold,minlength//240,210
-			for( size_t i = 0; i < lines.size(); i++ )
+			std::cout<<"Przetwarzanie obrazu..."<<std::endl;
+
+			while(angle>-360)
 			{
-				//x
-				if(lines[i][0]<minx)
-					minx=lines[i][0];
-				if(lines[i][2]<minx)
-					minx=lines[i][2];
-				if(lines[i][0]>maxx)
-					maxx=lines[i][0];
-				if(lines[i][2]>maxx)
-					maxx=lines[i][2];
-				//y
-				if(lines[i][1]<miny)
-					miny=lines[i][1];
-				if(lines[i][3]<miny)
-					miny=lines[i][3];
-				if(lines[i][1]>maxy)
-					maxy=lines[i][1];
-				if(lines[i][3]>maxy)
-					maxy=lines[i][3];
+				minx=1000;
+				miny=1000;
+				maxx=0;
+				maxy=0;
+				/***********************/
+				/* rotacja */
+				/***********************/
+				CvPoint2D32f centre;
+				CvMat *translate_matrix = cvCreateMat(2, 3, CV_32FC1);
 
-				cv::line( img, cv::Point(lines[i][0], lines[i][1]),
-					cv::Point(lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 1, 8 );
-			}
-			cv::bitwise_not(contour,contour);
+				cvSetZero(translate_matrix);
+				centre.x =  contour.cols/2;
+				centre.y = contour.rows/2;
+				cv2DRotationMatrix(centre, angle, 1.0, translate_matrix);
 
-			cout<<"LU: "<<minx<<", "<< miny<<" RD: "<<maxx<<" "<<maxy<<endl;
+				int ss = sqrt(contour.cols*contour.cols + contour.rows*contour.rows);
 
-			/* find labirynth's walls */
-			//find_labirynth(contour, helper,0,1);
-			//find_labirynth(contour, helper,0,-1);
-			//find_labirynth(contour, helper,1,1);
-			//find_labirynth(contour, helper,1,-1);
+				cvmSet(translate_matrix, 0, 2, cvmGet(translate_matrix,0,2)+(ss-contour.cols)/2);
+				cvmSet(translate_matrix, 1, 2, cvmGet(translate_matrix,1,2)+(ss-contour.rows)/2);
+
+				//cv::Mat dst_rotate(ss, ss, contour.depth());
+				//cv::Mat img_rotate(ss, ss, img.depth());
+
+				cv::warpAffine(contour, dst_rotate, translate_matrix, cv::Size(ss,ss),INTER_LINEAR, BORDER_CONSTANT, 255);//, CV_INTER_LINEAR , CV_WARP_FILL_OUTLIERS, 0);
+				cv::warpAffine(img, img_rotate, translate_matrix, cv::Size(ss,ss),INTER_LINEAR, BORDER_CONSTANT, 255);//, CV_INTER_LINEAR , CV_WARP_FILL_OUTLIERS, 0);
+
+				cvReleaseMat(&translate_matrix);
+
+				/***********************/
+				/* szukanie scian */
+				/***********************/
+
+				cv::bitwise_not(dst_rotate,dst_rotate);
+				cv::vector<cv::Vec4i> lines;
+				cv::HoughLinesP(dst_rotate, lines, 1, CV_PI/2, 220, 240, 0);//src,contener,?,kat,treshold,minlength//240,210
+				for( size_t i = 0; i < lines.size(); i++ )
+				{
+					//std::cout<<"HoughLinesP : lines.size()!=0 "<<endl;
+					//x
+					if(lines[i][0]<minx)
+						minx=lines[i][0];
+					if(lines[i][2]<minx)
+						minx=lines[i][2];
+					if(lines[i][0]>maxx)
+						maxx=lines[i][0];
+					if(lines[i][2]>maxx)
+						maxx=lines[i][2];
+					//y
+					if(lines[i][1]<miny)
+						miny=lines[i][1];
+					if(lines[i][3]<miny)
+						miny=lines[i][3];
+					if(lines[i][1]>maxy)
+						maxy=lines[i][1];
+					if(lines[i][3]>maxy)
+						maxy=lines[i][3];
+
+					cv::line( img_rotate, cv::Point(lines[i][0], lines[i][1]),
+						cv::Point(lines[i][2], lines[i][3]), cv::Scalar(0,0,255), 1, 8 );
+				}
+				cv::bitwise_not(dst_rotate,dst_rotate);
+				boost::this_thread::sleep(boost::posix_time::milliseconds(50));
+
+				/***********************/
+				/* sprawdzenie poprawnosci w danym ulozeniu */
+				/***********************/
+
+				if(lines.size() != 0 && maxx-minx>contour.cols*(2/3) && maxy-miny>contour.rows*(2/3))//!!! zamienic te stale!
+				{
+					cv::line( img_rotate, cv::Point(minx,miny),
+							cv::Point(maxx, maxy), cv::Scalar(0,255,0), 1, 8 );
+
+					std::cout<<"OK! Znaleziono sciany, czy jest wyjscie gdzie trzeba?"<<std::endl;
+
+					cv::Scalar pix;
+					int is_gate = -1;
+
+					int field = (maxx-minx)/LABIRYNT_SIZE_X;
+
+					for(int i=0;i<field;i++)//!!! 10 i 10/2 -> nie znamy jeszcze wielkosci FIELD..w kazdym razie sprawdzamy czy przy dolnym prawym narozniku po jego lewej nie ma scianki
+					{
+
+						pix.val[0] = dst_rotate.at<uchar>(maxy-field/2+i,maxx-field/2);//(Y:rows,X:cols)!!!!!!!
+
+						//std::cout<<" PIX przed: "<<pix.val[0]<<" "<<maxx-field/2<<" "<<maxy-field/2+i<<std::endl;
+						cv::line( img_rotate, cv::Point(maxx-field/2,maxy-field/2+i),
+							cv::Point(maxx-field/2,maxy-field/2+i), 0, 1, 8 );
+						//std::cout<<" PIX po: "<<pix.val[0]<<" "<<maxx-field/2<<" "<<maxy-field/2+i<<std::endl;
+
+						if(pix.val[0] < 255.0)
+						{
+
+							std::cout<<"Nie, jest tam sciana: "<<maxx-field/2<<" "<<maxy-field/2+i<<std::endl;
+							is_gate = 0;
+							break;
+						}
+						is_gate = 1;
+					}
+
+					std::cout<<"is_gate: "<<is_gate<<std::endl;
+
+					if(is_gate>0)
+					{
+						std::cout<<"OK! Labirynt odnaleziony, wyjscie tez"<<std::endl;
+						break;
+					}
+				}
+
+				out_img.write(img_rotate);//contour / image
+				newImage->raise();
+
+
+			angle-=2;
+			}//while(360stopni)
+			if(angle<=-360)
+			{std::cout<<"BOKI LABIRYNTU NIE ZNALEZIONE!!! SPRAWDZ CZY NA ZDJECIU JEST OBRAZ CALEGO LABIRYNTU I CZY NIE JEST ON ZBYT MALY"<<std::endl;}
 
 			corner_LU.x = minx;
 			corner_LU.y = miny;
 			corner_RD.x = maxx;
 			corner_RD.y = maxy;
-			std::cout<<corner_LU.x<<" "<<corner_LU.y<<" "<<corner_RD.x<<" "<<corner_RD.y<<endl;
+			std::cout<<"LU: "<<corner_LU.x<<" "<<corner_LU.y<<" RD: "<<corner_RD.x<<" "<<corner_RD.y<<endl;
 
 			//DEFINEs
 			EPS = 5;
@@ -247,111 +334,207 @@ void CvFindLabirynth_Processor::onNewImage()
 			temp2 = (corner_RD.y - corner_LU.y)/LABIRYNT_SIZE_Y;
 			FIELD = (temp1 + temp2)/2;//27
 			WALL = FIELD/2;
+			std::cout<<"FIELD: "<<FIELD<<std::endl;
 
+/***********************/
+/** FIND BALL AND HIDE */
+/***********************/
 
-			/* find walls inside labirynth */
-			cv::Point2i corner((corner_LU.x + WALL),(corner_LU.y + WALL));
+			cv::Mat blr(dst_rotate.rows,dst_rotate.cols, dst_rotate.depth());;
+			GaussianBlur( dst_rotate, blr, Size(9, 9), 2, 2 );
 
-			for(y_rect=0; y_rect < LABIRYNT_SIZE_Y; y_rect++)
+			cv::vector<cv::Vec3f> circles;
+			bool is_ball=false;
+
+			for(int jj=0;jj<50;jj++)
 			{
-				for(x_rect=0; x_rect < LABIRYNT_SIZE_X; x_rect++)
+				//for(int ii=0;ii<50;ii++)//!
+				//{
+					//for(int xx=0;xx<3;xx++)
+					//{
+						cv::HoughCircles(blr, circles, CV_HOUGH_GRADIENT,
+						1, 10, 75/*50+ii*/, 50-jj/*120-jj*/, FIELD/2-6, FIELD/2-2/*-2-xx*/);//4, 15);// FIELD/4, FIELD/3);
+
+						if(circles.size()!=0)//for( size_t i = 0; i < circles.size(); i++ )
+						{
+							 std::cout<<"CIRCLE ii: "/*<<ii*/<<" jj: "<<jj/*<<" xx: "<<xx<<" "*/<<circles[0][0]<<" "<<circles[0][1]<<" "<<circles[0][2]<<endl;
+
+							 circles[0][0] += 1;//wsp x
+							 circles[0][1] += 1;//wsp y
+							 circles[0][2] += 2;//promien - zamaluj wiecej
+
+							 ball_center.x = circles[0][0];
+							 ball_center.y = circles[0][1];
+
+							 cv::Point center(cvRound(circles[0][0]), cvRound(circles[0][1]));
+							 int radius = cvRound(circles[0][2]);
+
+							 std::cout<<"CIRCLE: "<<circles[0][0]<<" "<<circles[0][1]<<" "<<circles[0][2]<<endl;
+
+							 cv::circle( dst_rotate, center, radius, Scalar(255,255,255), -1, 8, 0 );
+							 is_ball=true;
+							 //break;
+						}
+						if (is_ball)
+							break;
+					//}
+					//if (is_ball)
+					//	break;
+				//std::cout<<".";
+				//}
+				if (is_ball)
+					break;
+			}
+			if (!is_ball)
+			{
+				std::cout<<"PROBLEM WITH BALL! RESTART"<<std::endl;
+				return;
+			}
+			std::cout<<"END"<<std::endl;
+
+
+
+//			std::cout<<"FIELD: "<<FIELD<<std::endl;
+//			std::cout<<"CIRCLES:"<<std::endl;
+//
+//			if(circles.size() != 0)
+//			{
+//				circles[0][0] += 2;//zamaluj wiecej
+//				circles[0][1] += 2;
+//				circles[0][2] += 7;//radius - poprawka
+//
+//				ball_center.x = circles[0][0];
+//				ball_center.y = circles[0][1];
+//
+//				for( size_t i = 0; i < circles.size(); i++ )
+//					{
+//						 cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+//						 int radius = cvRound(circles[i][2]);
+//
+//						 std::cout<<"CIRCLE: "<<circles[i][0]<<" "<<circles[i][1]<<" "<<circles[i][2]<<endl;
+//
+//						 cv::circle( dst_rotate, center, radius, Scalar(255,255,255), -1, 8, 0 );
+//					}
+//
+//
+//				std::cout<<"CIRCLES END:"<<std::endl;
+//
+//
+/***********************/
+/** FIND INSIDE WALLS */
+/***********************/
+				cv::Point2i corner((corner_LU.x + WALL),(corner_LU.y + WALL));
+
+				for(y_rect=0; y_rect < LABIRYNT_SIZE_Y; y_rect++)
 				{
-					//dzielenie int'ow?
-					cv::Point2i center(corner.x + (x_rect)*((corner_RD.x - corner_LU.x)/LABIRYNT_SIZE_X), corner.y + (y_rect)*((corner_RD.y - corner_LU.y)/LABIRYNT_SIZE_Y));
-
-					printf("POLE (%d, %d)\n",x_rect+1,y_rect+1);
-
-					cv::Point2i search = center;
-
-					/**/
-
-					cv::Scalar pix;
-					pix.val[0] = contour.at<uchar>(search.y, search.x);
-
-					if(pix.val[0] != 255.0)//TRAFILISMY NA KULKE
+					for(x_rect=0; x_rect < LABIRYNT_SIZE_X; x_rect++)
 					{
-						cv::Point2i pt1, pt2;
-						int e = 5;
-						pt1.x = search.x - (WALL-e);
-						pt1.y = search.y - (WALL-e);
-						pt2.x = search.x + (WALL-e);
-						pt2.y = search.y + (WALL-e);
+						//dzielenie int'ow?
+						cv::Point2i center(corner.x + (x_rect)*((corner_RD.x - corner_LU.x)/LABIRYNT_SIZE_X), corner.y + (y_rect)*((corner_RD.y - corner_LU.y)/LABIRYNT_SIZE_Y));
 
-						rectangle(contour, pt1, pt2, 255.0/*const Scalar& color*/,CV_FILLED /* int thickness=1, int lineType=8, int shift=0*/);
-						ball_center.x = search.x;
-						ball_center.y = search.y;
+						//printf("POLE (%d, %d)\n",x_rect+1,y_rect+1);
+
+						cv::Point2i search = center;
+
+
+						labirynt_info_array[y_rect][x_rect].n_wall = find_wall(dst_rotate, helper, 1,-1, center);
+						labirynt_info_array[y_rect][x_rect].w_wall = find_wall(dst_rotate, helper, 0,-1, center);
+						labirynt_info_array[y_rect][x_rect].e_wall = find_wall(dst_rotate, helper, 0, 1, center);
+						labirynt_info_array[y_rect][x_rect].s_wall = find_wall(dst_rotate, helper, 1, 1, center);
+						//to powinno byc w konstruktorze
+						labirynt_info_array[y_rect][x_rect].value = -1;
+
+						//cout<<labirynt_info_array[y_rect][x_rect].n_wall<<endl;
 					}
-
-
-
-					/**/
-
-					labirynt_info_array[y_rect][x_rect].n_wall = find_wall(contour, helper, 1,-1, center);
-					labirynt_info_array[y_rect][x_rect].w_wall = find_wall(contour, helper, 0,-1, center);
-					labirynt_info_array[y_rect][x_rect].e_wall = find_wall(contour, helper, 0, 1, center);
-					labirynt_info_array[y_rect][x_rect].s_wall = find_wall(contour, helper, 1, 1, center);
-					//to powinno byc w konstruktorze
-					labirynt_info_array[y_rect][x_rect].value = -1;
-
-					//cout<<labirynt_info_array[y_rect][x_rect].n_wall<<endl;
 				}
-			}
 
-			//find start field (knowing ball_center point)
-			int FIELD_X = ((corner_RD.x - corner_LU.x)/LABIRYNT_SIZE_X);
-			int FIELD_Y = ((corner_RD.y - corner_LU.y)/LABIRYNT_SIZE_Y);
+//				for(y_rect=0; y_rect < LABIRYNT_SIZE_Y; y_rect++)
+//				{
+//					for(x_rect=0; x_rect < LABIRYNT_SIZE_X; x_rect++)
+//					{
+//						std::cout<<labirynt_info_array[y_rect][x_rect].n_wall<<" "<<labirynt_info_array[y_rect][x_rect].w_wall<<" "<<labirynt_info_array[y_rect][x_rect].e_wall<<" "<<labirynt_info_array[y_rect][x_rect].s_wall<<"     ";
+//					}
+//					std::cout<<std::endl;
+//				}
 
-			int xfield,yfield;
+/***********************/
+/** FIND START FIELD (knowing ball_center point) */
+/***********************/
 
-			cv::Point2i temp = corner;
+				int FIELD_X = ((corner_RD.x - corner_LU.x)/LABIRYNT_SIZE_X);
+				int FIELD_Y = ((corner_RD.y - corner_LU.y)/LABIRYNT_SIZE_Y);
 
-			for(int ny=0;ny<LABIRYNT_SIZE_Y;ny++)
-			{
-				if(ball_center.y+FIELD_Y/2 > temp.y && ball_center.y-FIELD_Y/2 < temp.y)
+				int xfield = -1,yfield = -1;
+
+				cv::Point2i temp = corner;
+
+				for(int ny=0;ny<LABIRYNT_SIZE_Y;ny++)
 				{
-					std::cout<<"temp.y"<<temp.y<<endl;
-					yfield = ny;
-					break;
+					if(ball_center.y+FIELD_Y/2 > temp.y && ball_center.y-FIELD_Y/2 < temp.y)
+					{
+						std::cout<<"temp.y"<<temp.y<<endl;
+						yfield = ny;
+						break;
+					}
+					temp.y+=FIELD_Y;
 				}
-				temp.y+=FIELD_Y;
-			}
-			temp = corner;
-			for(int nx=0;nx<LABIRYNT_SIZE_X;nx++)
-			{
-				if(ball_center.x+FIELD_X/2 > temp.x && ball_center.x-FIELD_X/2 < temp.x)
+				temp = corner;
+				for(int nx=0;nx<LABIRYNT_SIZE_X;nx++)
 				{
-					std::cout<<"temp.x"<<temp.x<<endl;
-					xfield = nx;
-					break;
+					if(ball_center.x+FIELD_X/2 > temp.x && ball_center.x-FIELD_X/2 < temp.x)
+					{
+						std::cout<<"temp.x"<<temp.x<<endl;
+						xfield = nx;
+						break;
+					}
+					temp.x+=FIELD_X;
 				}
-				temp.x+=FIELD_X;
-			}
-			std::cout<<"FIELD: "<<xfield<<" "<<yfield<<endl;
-
-
-			/* find path */
-			if (find_path(xfield,yfield) == false)
-				printf("Labirynt nie ma drogi wyjscia!!\n");
-			else
-			{
-				printf("Znaleziono wyjscie - Oto sciezka:\n");
-				for(unsigned int i=0;i<path.size();i++)
+				std::cout<<"FIELD: "<<xfield<<" "<<yfield<<endl;
+				if(xfield < 0 || yfield <0)
 				{
-					printf("%d,%d\n",path[i].x,path[i].y);
+					std::cout<<"KULKA POZA LABIRYNTEM"<<endl;
+					//return;
 				}
-			}
+				else
+				{
+/***********************/
+/** popraw jezeli przy zamalowaniu pilki zamalowalismy scianke */
+/***********************/
 
+					labirynt_info_array[yfield][xfield].n_wall = find_wall_ball(dst_rotate, helper, 1,-1, ball_center);
+					labirynt_info_array[yfield][xfield].w_wall = find_wall_ball(dst_rotate, helper, 0,-1, ball_center);
+					labirynt_info_array[yfield][xfield].e_wall = find_wall_ball(dst_rotate, helper, 0, 1, ball_center);
+					labirynt_info_array[yfield][xfield].s_wall = find_wall_ball(dst_rotate, helper, 1, 1, ball_center);
+
+/***********************/
+/** FIND PATH */
+/***********************/
+					/* find path */
+					if (find_path(xfield,yfield) == false)
+					{
+						printf("Labirynt nie ma drogi wyjscia!!\n");
+					}
+					else
+					{
+						printf("Znaleziono wyjscie - Oto sciezka:\n");
+						for(unsigned int i=0;i<path.size();i++)
+						{
+							printf("%d,%d\n",path[i].x,path[i].y);
+						}
+					}
+				}
+
+//			}//circle.size()!=0
 
 			has_image = true;
-			out_img.write(contour);//contour / image
+			out_img.write(dst_rotate);//contour / image
 			newImage->raise();
 
 		}//has_image
 		else
 		{
-			//image catched
+			//has_image == true
 		}
-
 
 	} catch (const Exception& e) {
 		LOG(LERROR) << e.what() << "\n";
@@ -376,24 +559,30 @@ bool CvFindLabirynth_Processor::find_wall(cv::Mat img, cv::Mat dst, int flag, in
 
 		pix.val[0] = img.at<uchar>(search.y, search.x);
 
-		if(pix.val[0] != 255.0)
+		//cv::line( img, cv::Point( search.x,search.y),
+		//	cv::Point(search.x,search.y), 0, 1, 8 );
+
+		//out_img.write(img);//contour / image
+		//newImage->raise();
+
+		if(pix.val[0] < 255.0)
 		{
 			/*wydruki*/
 			//std::cout<<search.x<<" "<<search.y<<endl;
-			if(flag==0)
-			{
-				if(value==1)
-					printf("SCIANA: NA PRAWO\n");
-				else
-					printf("SCIANA: NA LEWO\n");
-			}
-			if(flag==1)
-			{
-				if(value==1)
-					printf("SCIANA: NA DOLE\n");
-				else
-					printf("SCIANA: NA GORZE\n");
-			}
+//			if(flag==0)
+//			{
+//				if(value==1)
+//					printf("SCIANA: NA PRAWO\n");
+//				else
+//					printf("SCIANA: NA LEWO\n");
+//			}
+//			if(flag==1)
+//			{
+//				if(value==1)
+//					printf("SCIANA: NA DOLE\n");
+//				else
+//					printf("SCIANA: NA GORZE\n");
+//			}
 
 			/*koniec wydrukow*/
 
@@ -412,6 +601,62 @@ bool CvFindLabirynth_Processor::find_wall(cv::Mat img, cv::Mat dst, int flag, in
 	}
 return false;
 }
+
+bool CvFindLabirynth_Processor::find_wall_ball(cv::Mat img, cv::Mat dst, int flag, int value, cv::Point2i center)
+{
+	for(int ii=0;ii<4;ii++)
+	{
+		//sprawdzaj blisko naroznikow danego pola
+		cv::Point2i kulka = center;
+		int eps = WALL - 10;//WALL*(3/4);
+		if(ii==0)
+		{
+			std::cout<<"1"<<std::endl;
+			kulka.x = kulka.x + eps;
+			kulka.y = kulka.y + eps;
+		}
+		else if(ii==1)
+		{
+			std::cout<<"2"<<std::endl;
+			kulka.x -= eps;
+			kulka.y += eps;
+		}
+		else if(ii==2)
+		{
+			std::cout<<"3"<<std::endl;
+			kulka.x -= eps;
+			kulka.y -= eps;
+		}
+		else if(ii==3)
+		{
+			std::cout<<"4"<<std::endl;
+			kulka.x += eps;
+			kulka.y -= eps;
+		}
+
+		std::cout<<"szukam od: "<<kulka.x<<" "<<kulka.y<<endl;
+		cv::Scalar pixy;
+		for(int i=1;i<(WALL);i++)
+		{
+
+			pixy.val[0] = img.at<uchar>(kulka.y, kulka.x);
+			if(pixy.val[0] < 255.0)
+			{
+				std::cout<<"sciana w: "<<kulka.x<<" "<<kulka.y<<endl;
+				return true;
+			}
+
+			if(flag == 0)
+				kulka.x = kulka.x + value;
+			if(flag == 1)
+				kulka.y = kulka.y + value;
+		}
+	}
+	std::cout<<"sciana - nie ma"<<endl;
+return false;
+}
+
+
 /**
  * find path in labirynth using labirynt_info_array
  */
