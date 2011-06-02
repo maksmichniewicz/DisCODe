@@ -133,6 +133,8 @@ protected:
 	*/
 	void set_path(Point_labirynth end, Point_labirynth start);
 
+	void set_difference(int xdiff,int ydiff);
+
 
 
 
@@ -152,8 +154,6 @@ protected:
 private:
 	void onNewImage();
 	void onRpcCall();
-
-	void initChessboard();
 
 	/** event handler. */
 	Base::EventHandler <CvFindLabirynth_Processor> h_onNewImage;

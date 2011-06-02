@@ -361,7 +361,7 @@ void CvFindLabirynth_Processor::onNewImage()
 
 							 circles[0][0] += 1;//wsp x
 							 circles[0][1] += 1;//wsp y
-							 circles[0][2] += 2;//promien - zamaluj wiecej
+							 circles[0][2] += 3;//promien - zamaluj wiecej
 
 							 ball_center.x = circles[0][0];
 							 ball_center.y = circles[0][1];
@@ -501,10 +501,15 @@ void CvFindLabirynth_Processor::onNewImage()
 /** popraw jezeli przy zamalowaniu pilki zamalowalismy scianke */
 /***********************/
 
-					labirynt_info_array[yfield][xfield].n_wall = find_wall_ball(dst_rotate, helper, 1,-1, ball_center);
-					labirynt_info_array[yfield][xfield].w_wall = find_wall_ball(dst_rotate, helper, 0,-1, ball_center);
-					labirynt_info_array[yfield][xfield].e_wall = find_wall_ball(dst_rotate, helper, 0, 1, ball_center);
-					labirynt_info_array[yfield][xfield].s_wall = find_wall_ball(dst_rotate, helper, 1, 1, ball_center);
+					//pixelowo srodek pola gdzie jest pilka
+					Point ctr;
+					ctr.x = corner_LU.x +FIELD_X/2 + xfield*FIELD_X;
+					ctr.y = corner_LU.y +FIELD_Y/2 + yfield*FIELD_Y;
+
+					labirynt_info_array[yfield][xfield].n_wall = find_wall_ball(dst_rotate, helper, 1,-1, ctr);
+					labirynt_info_array[yfield][xfield].w_wall = find_wall_ball(dst_rotate, helper, 0,-1, ctr);
+					labirynt_info_array[yfield][xfield].e_wall = find_wall_ball(dst_rotate, helper, 0, 1, ctr);
+					labirynt_info_array[yfield][xfield].s_wall = find_wall_ball(dst_rotate, helper, 1, 1, ctr);
 
 /***********************/
 /** FIND PATH */
@@ -522,6 +527,31 @@ void CvFindLabirynth_Processor::onNewImage()
 							printf("%d,%d\n",path[i].x,path[i].y);
 						}
 					}
+/***********************/
+/** POPRAWA JEZELI PILKA NIE W CENTRUM POLA */
+/***********************/
+
+					if(path.size()>2)
+					{
+						//pixelowo srodek pola gdzie jest pilka
+						int x_field_center = corner_LU.x + FIELD_X/2 + xfield*FIELD_X;
+						int y_field_center = corner_LU.y + FIELD_Y/2 + yfield*FIELD_Y;
+
+						int xdiff = ball_center.x - x_field_center;
+						int ydiff = ball_center.y - y_field_center;
+
+						int roznica = FIELD/3;
+						std::cout<<"roznica "<<roznica<<" a wlasciwa: "<<xdiff<<" i "<<ydiff<<std::endl;
+
+						if(xdiff > roznica || xdiff < -roznica || ydiff > roznica || ydiff < -roznica)
+							set_difference(xdiff,ydiff);
+					}
+					printf("Oto poprawiona sciezka:\n");
+					for(unsigned int i=0;i<path.size();i++)
+					{
+						printf("%d,%d\n",path[i].x,path[i].y);
+					}
+
 				}
 
 //			}//circle.size()!=0
@@ -783,6 +813,122 @@ void CvFindLabirynth_Processor::set_path(Point_labirynth p,Point_labirynth s)
 			return ;
 	}
 return ;
+}
+
+void CvFindLabirynth_Processor::set_difference(int xdiff,int ydiff)
+{
+	int temp = path.size();
+	Point_labirynth first, next, zero;
+	first.x = path[temp-1].x;
+	first.y = path[temp-1].y;
+	next.x = path[temp-2].x;
+	next.y = path[temp-2].y;
+
+	if(first.x < next.x)//w prawo
+	{
+		if(xdiff>0 && abs(xdiff)>abs(ydiff))//x+
+			return;
+		if(xdiff<0 && abs(xdiff)>abs(ydiff))//x-
+		{
+			zero.x = first.x-1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff>0 && abs(xdiff)<abs(ydiff))//y+
+		{
+			zero.x = first.x;
+			zero.y = first.y+1;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff<0 && abs(xdiff)<abs(ydiff))//y-
+		{
+			zero.x = first.x;
+			zero.y = first.y-1;
+			path.push_back(zero);
+			return;
+		}
+	}
+	else if(first.x > next.x)//w lewo
+	{
+		if(xdiff>0 && abs(xdiff)>abs(ydiff))//x+
+		{
+			zero.x = first.x+1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(xdiff<0 && abs(xdiff)>abs(ydiff))//x-
+			return;
+		if(ydiff>0 && abs(xdiff)<abs(ydiff))//y+
+		{
+			zero.x = first.x;
+			zero.y = first.y+1;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff<0 && abs(xdiff)<abs(ydiff))//y-
+		{
+			zero.x = first.x;
+			zero.y = first.y+1;
+			path.push_back(zero);
+			return;
+		}
+	}
+	else if(first.y < next.y)//w dol
+	{
+		if(xdiff>0 && abs(xdiff)>abs(ydiff))//x+
+		{
+			zero.x = first.x+1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(xdiff<0 && abs(xdiff)>abs(ydiff))//x-
+		{
+			zero.x = first.x-1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff>0 && abs(xdiff)<abs(ydiff))//y+
+			return;
+		if(ydiff<0 && abs(xdiff)<abs(ydiff))//y-
+		{
+			zero.x = first.x;
+			zero.y = first.y-1;
+			path.push_back(zero);
+			return;
+		}
+	}
+	else if(first.y > next.y)//w gore
+	{
+		if(xdiff>0 && abs(xdiff)>abs(ydiff))//x+
+		{
+			zero.x = first.x+1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(xdiff<0 && abs(xdiff)>abs(ydiff))//x-
+		{
+			zero.x = first.x-1;
+			zero.y = first.y;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff>0 && abs(xdiff)<abs(ydiff))//y+
+		{
+			zero.x = first.x;
+			zero.y = first.y+1;
+			path.push_back(zero);
+			return;
+		}
+		if(ydiff<0 && abs(xdiff)<abs(ydiff))//y-
+			return;
+	}
+
 }
 
 
