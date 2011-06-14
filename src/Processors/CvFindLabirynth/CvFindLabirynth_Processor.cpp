@@ -30,14 +30,15 @@ CvFindLabirynth_Processor::CvFindLabirynth_Processor(const std::string & name) :
 	path_set = false;
 	corner_LU = cv::Point2i(0,0);
 	corner_RD = cv::Point2i(0,0);
+	path.clear();
 
 
-	findLabirynthFlags = 0;
-	temp=90;
-	found=true;
-
-	TEMP = 0;
-	HELP = false;
+//	findLabirynthFlags = 0;
+//	temp=90;
+//	found=true;
+//
+//	TEMP = 0;
+//	HELP = false;
 
 }
 
@@ -97,6 +98,23 @@ void CvFindLabirynth_Processor::onRpcCall()
 	LOG(LNOTICE) << "CvFindLabirynth_Processor::onRpcCall(): paramT=" << paramT;
 
 	LReading lr;
+	lr.waiting = false;
+
+
+	if(paramT>0.0)
+		has_image = false;
+
+	//jezeli nie jest to pierwsze czytanie to czytaj raz jeszcze!
+	if(!has_image)
+	{
+
+		LOG(LNOTICE) << "Nowe przetworzenie zdjecia...";
+		lr.waiting = true;
+		out_info.write(lr);
+		rpcResult->raise();
+		LOG(LNOTICE) << "Koniec przetworzenia, przesylam dane...";
+		return;
+	}
 
 	//!
 	lr.path_exists = path_exists;
@@ -122,32 +140,8 @@ void CvFindLabirynth_Processor::onRpcCall()
 	}
 
 	out_info.write(lr);
-
-	//std::cout<<"lr.info= "<<lr.info<<std::endl;
-/*
-	cv::Point2f point((image.size().width / 2),(image.size().height / 2));
-	corners.push_back(point);
-	corners.push_back(point);
-
-
-	Types::ImagePosition imagePosition;
-	double maxPixels = std::max(image.size().width, image.size().height);
-	imagePosition.elements[0] = (corners[0].x - image.size().width / 2) / maxPixels;
-	imagePosition.elements[1] = (corners[0].y - image.size().height / 2) / maxPixels;
-	imagePosition.elements[2] = 0;
-	imagePosition.elements[3] = - atan2(corners[1].y - corners[0].y, corners[1].x - corners[0].x);
-	out_imagePosition.write(imagePosition);
-
-	lr.info = "info3";
-	out_info.write(lr);
-
-	labirynthFound->raise();
-
-	corners.pop_back();
-	corners.pop_back();
-*/
-
 	rpcResult->raise();
+
 }
 
 
@@ -165,6 +159,19 @@ void CvFindLabirynth_Processor::onNewImage()
 		/*do it once only*/
 		if(!has_image)
 		{
+			//czysc dane zeby bylo ok przed nastepnym uzyciem
+			//has_image = false;
+			q=0;
+			path_exists = false;
+			path_set = false;
+			corner_LU = cv::Point2i(0,0);
+			corner_RD = cv::Point2i(0,0);
+
+			path.clear();
+			//********************************
+
+
+
 			image = in_img.read();
 			//has_image = true;
 
@@ -387,7 +394,7 @@ void CvFindLabirynth_Processor::onNewImage()
 			}
 			if (!is_ball)
 			{
-				std::cout<<"PROBLEM WITH BALL! RESTART"<<std::endl;
+				std::cout<<"PROBLEM WITH BALL DETECTION! RESTART"<<std::endl;
 				return;
 			}
 			std::cout<<"END"<<std::endl;
@@ -493,7 +500,7 @@ void CvFindLabirynth_Processor::onNewImage()
 				if(xfield < 0 || yfield <0)
 				{
 					std::cout<<"KULKA POZA LABIRYNTEM"<<endl;
-					//return;
+					return;
 				}
 				else
 				{
@@ -559,6 +566,7 @@ void CvFindLabirynth_Processor::onNewImage()
 			has_image = true;
 			out_img.write(dst_rotate);//contour / image
 			newImage->raise();
+
 
 		}//has_image
 		else

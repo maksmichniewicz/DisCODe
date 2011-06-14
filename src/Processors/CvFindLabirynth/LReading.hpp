@@ -26,6 +26,7 @@ public:
 	LReading(const LReading& o)
 	{
 		path_exists = o.path_exists;
+		waiting = o.waiting;
 
 		for(int i=0;i<MAX_LAB_LENGTH;i++)
 			for(int j=0;j<2;j++)
@@ -43,6 +44,7 @@ public:
 
 	bool path_exists;
 	int path [MAX_LAB_LENGTH][2];
+	bool waiting;
 
 	virtual void send(boost::shared_ptr<xdr_oarchive<> > & ar){
 		*ar<<*this;
@@ -58,6 +60,7 @@ private:
 
 		ar & path_exists;
 		ar & path;
+		ar & waiting;
 	}
 };
 

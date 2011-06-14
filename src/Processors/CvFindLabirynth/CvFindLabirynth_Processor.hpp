@@ -70,8 +70,8 @@ public:
 	int FIELD;
 	int WALL;
 
-	int TEMP;
-	bool HELP;
+//	int TEMP;
+//	bool HELP;
 
 protected:
 	/*!
@@ -169,10 +169,10 @@ private:
 	Base::DataStreamOut <cv::Mat> out_img;
 
 	/** Located corners.*/
-	std::vector<cv::Point2f> corners;
-	int findLabirynthFlags;
-	int temp;
-	bool found;
+//	std::vector<cv::Point2f> corners;
+//	int findLabirynthFlags;
+//	int temp;
+//	bool found;
 
 	cv::Mat image;
 	bool has_image;
