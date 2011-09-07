@@ -22,3 +22,4 @@ install(
 )
 
 ADD_SUBDIRECTORY(Network)
+ADD_SUBDIRECTORY(xdr)

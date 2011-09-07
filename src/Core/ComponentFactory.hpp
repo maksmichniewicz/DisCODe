@@ -125,7 +125,7 @@ public:
 			lib.setLocation(filename_);
 			// Validate operation.
 			if (!lib.load())
-				throw Common::DisCODeException(std::string("Library open error: ") + lib.error());
+				throw Common::DisCODeException(std::string("Library open error (") + filename_ + "): " + lib.error());
 
 			// Try to retrieve method returning type.
 			Base::returnType ret_type;
