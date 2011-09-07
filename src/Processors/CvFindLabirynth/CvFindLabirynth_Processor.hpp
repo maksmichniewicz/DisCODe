@@ -28,6 +28,8 @@
 #include "DataStream.hpp"
 #include "Props.hpp"
 
+#include "Property.hpp"
+
 #include <cv.h>
 //using namespace cv;
 #include <highgui.h>
@@ -176,6 +178,9 @@ private:
 
 	cv::Mat image;
 	bool has_image;
+
+	Base::Property<int> m_param1;
+	Base::Property<int> m_param2;
 
 };
 

@@ -22,7 +22,9 @@ using namespace Types::Objects3D;
 using Types::Mrrocpp_Proxy::LReading;
 
 CvFindLabirynth_Processor::CvFindLabirynth_Processor(const std::string & name) :
-	Component(name)
+	Component(name),
+	m_param1("param1", 192, "range"),
+	m_param2("param2", 20, "range")
 {
 	has_image = false;
 	q=0;
@@ -32,6 +34,14 @@ CvFindLabirynth_Processor::CvFindLabirynth_Processor(const std::string & name) :
 	corner_RD = cv::Point2i(0,0);
 	path.clear();
 
+	m_param1.addConstraint("0");
+	m_param1.addConstraint("255");
+
+	m_param2.addConstraint("0");
+	m_param2.addConstraint("255");
+
+	registerProperty(m_param1);
+	registerProperty(m_param2);
 
 //	findLabirynthFlags = 0;
 //	temp=90;
@@ -112,7 +122,7 @@ void CvFindLabirynth_Processor::onRpcCall()
 		lr.waiting = true;
 		out_info.write(lr);
 		rpcResult->raise();
-		LOG(LNOTICE) << "Koniec przetworzenia, przesylam dane...";
+		LOG(LNOTICE) << "Koniec przetworzenia, przesylam dane z waiting";
 		return;
 	}
 
@@ -305,6 +315,7 @@ void CvFindLabirynth_Processor::onNewImage()
 
 							std::cout<<"Nie, jest tam sciana: "<<maxx-field/2<<" "<<maxy-field/2+i<<std::endl;
 							is_gate = 0;
+							angle-=88;//jezeli juz znalazl sciany to obroc o 90 a nie dalej co dwa stopnie..
 							break;
 						}
 						is_gate = 1;
@@ -343,6 +354,25 @@ void CvFindLabirynth_Processor::onNewImage()
 			WALL = FIELD/2;
 			std::cout<<"FIELD: "<<FIELD<<std::endl;
 
+			//czyszczenie szumow na zewnatrz labiryntu
+			for(int i=0;i<corner_LU.y-5;i++)
+			{
+				cv::line( dst_rotate, cv::Point(0,i), cv::Point(dst_rotate.cols,i), 255, 1, 8 );
+			}
+			for(int i=corner_RD.y+5;i<dst_rotate.rows;i++)
+			{
+				cv::line( dst_rotate, cv::Point(0,i), cv::Point(dst_rotate.cols, i), 255, 1, 8 );
+			}
+			for(int i=0;i<corner_LU.x-5;i++)
+			{
+				cv::line( dst_rotate, cv::Point(i,0), cv::Point(i,dst_rotate.rows), 255, 1, 8 );
+			}
+			for(int i=corner_RD.x+5;i<dst_rotate.cols;i++)
+			{
+				cv::line( dst_rotate, cv::Point(i,0), cv::Point(i,dst_rotate.rows), 255, 1, 8 );
+			}
+
+
 /***********************/
 /** FIND BALL AND HIDE */
 /***********************/
@@ -353,45 +383,60 @@ void CvFindLabirynth_Processor::onNewImage()
 			cv::vector<cv::Vec3f> circles;
 			bool is_ball=false;
 
-			for(int jj=0;jj<50;jj++)
+
+			//cv::HoughCircles(blr, circles, CV_HOUGH_GRADIENT,
+			//2/*1*/, FIELD/*10*/, 10/*75*/, 10/*50-jj*/, FIELD/2-6, FIELD/2-2/*-2-xx*/);//4, 15);// FIELD/4, FIELD/3);
+
+			int x=25;
+			while(x>9)
 			{
-				//for(int ii=0;ii<50;ii++)//!
-				//{
-					//for(int xx=0;xx<3;xx++)
-					//{
-						cv::HoughCircles(blr, circles, CV_HOUGH_GRADIENT,
-						1, 10, 75/*50+ii*/, 50-jj/*120-jj*/, FIELD/2-6, FIELD/2-2/*-2-xx*/);//4, 15);// FIELD/4, FIELD/3);
+			cv::HoughCircles(blr, circles, CV_HOUGH_GRADIENT, 2, FIELD, m_param1, x/*m_param2*/, FIELD/2-8/*FIELD/2-6*/, FIELD/2-1);
 
-						if(circles.size()!=0)//for( size_t i = 0; i < circles.size(); i++ )
-						{
-							 std::cout<<"CIRCLE ii: "/*<<ii*/<<" jj: "<<jj/*<<" xx: "<<xx<<" "*/<<circles[0][0]<<" "<<circles[0][1]<<" "<<circles[0][2]<<endl;
+			/*if(circles.size()!=0)*/for( size_t i = 0; i < circles.size(); i++ )
+			{
+				 std::cout<<"CIRCLE ii: "<<circles[i][0]<<" "<<circles[i][1]<<" "<<circles[i][2]<<endl;
 
-							 circles[0][0] += 1;//wsp x
-							 circles[0][1] += 1;//wsp y
-							 circles[0][2] += 3;//promien - zamaluj wiecej
+				 circles[i][0] += 1;//wsp x
+				 circles[i][1] += 1;//wsp y
+				 circles[i][2] += 5;//promien - zamaluj wiecej
 
-							 ball_center.x = circles[0][0];
-							 ball_center.y = circles[0][1];
 
-							 cv::Point center(cvRound(circles[0][0]), cvRound(circles[0][1]));
-							 int radius = cvRound(circles[0][2]);
 
-							 std::cout<<"CIRCLE: "<<circles[0][0]<<" "<<circles[0][1]<<" "<<circles[0][2]<<endl;
+				cv::Scalar pixy;
+				pixy.val[0] = blr.at<uchar>(circles[i][1], circles[i][0]);
+				if(pixy.val[0] < 250.0)
+				{
+					ball_center.x = circles[i][0];
+					ball_center.y = circles[i][1];
+					std::cout<<"CIRCLE: GOOD "<<circles[i][0]<<" "<<circles[i][1]<<" "<<circles[i][2]<<endl;
+					is_ball=true;
+				}
 
-							 cv::circle( dst_rotate, center, radius, Scalar(255,255,255), -1, 8, 0 );
-							 is_ball=true;
-							 //break;
-						}
-						if (is_ball)
-							break;
-					//}
-					//if (is_ball)
-					//	break;
-				//std::cout<<".";
-				//}
-				if (is_ball)
-					break;
+
+				 cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+				 int radius = cvRound(circles[i][2]);
+				 //inne zle okregi
+				 //cv::circle( dst_rotate, center, radius, Scalar(200,200,200), -1, 8, 0 );
+
+
+				 if(pixy.val[0] < 250.0)
+				 {
+					 cv::circle( dst_rotate, center, radius, Scalar(255,255,255), -1, 8, 0 );
+					 std::cout<<"PARAM2 = "<<x<<endl;
+					 x=0;
+				 }
+
 			}
+
+			x--;
+			}
+
+
+			//out_img.write(dst_rotate);//contour / image
+			//newImage->raise();
+			//boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
+
+
 			if (!is_ball)
 			{
 				std::cout<<"PROBLEM WITH BALL DETECTION! RESTART"<<std::endl;
@@ -562,6 +607,7 @@ void CvFindLabirynth_Processor::onNewImage()
 				}
 
 //			}//circle.size()!=0
+
 
 			has_image = true;
 			out_img.write(dst_rotate);//contour / image
